@@ -7,6 +7,7 @@ pub enum RispExp {
     Nil,
     Bool(bool),
     Symbol(String),
+    Literal(String),
     Number(f64),
     List(Vec<RispExp>),
     Func(fn(&[RispExp]) -> Result<RispExp, RispErr>),
@@ -39,7 +40,7 @@ impl<'a> RispEnv<'a> {
 #[derive(Clone)]
 pub struct RispLambda {
     pub params_exp: Rc<RispExp>,
-    pub body_exp: Rc<RispExp>,
+    pub body_exp: Rc<Vec<RispExp>>,
 }
 
 pub type RispResult = Result<RispExp, RispErr>;
@@ -55,8 +56,9 @@ impl fmt::Display for RispExp {
                 let xs: Vec<String> = list.iter().map(|x| x.to_string()).collect();
                 format!("({})", xs.join(","))
             },
-            RispExp::Func(_) => "Function {}".to_string(),
-            RispExp::Lambda(_) => "Lambda {}".to_string(),
+            RispExp::Func(_) => "Function".to_string(),
+            RispExp::Lambda(_) => "Lambda".to_string(),
+            RispExp::Literal(s) => s.clone(),
         };
 
         write!(f, "{}", str)

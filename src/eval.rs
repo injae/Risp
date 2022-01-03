@@ -3,6 +3,8 @@ use crate::parser::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::convert::TryFrom;
+use std::fs;
+use crate::repl::parse_eval;
 
 fn eval_built_in_func(exp: &RispExp, args: &[RispExp], env: &mut RispEnv) -> Option<RispResult> {
     match exp {
@@ -11,11 +13,32 @@ fn eval_built_in_func(exp: &RispExp, args: &[RispExp], env: &mut RispEnv) -> Opt
                 "if"  => Some(eval_if_arg(args, env)),
                 "let" => Some(eval_let_arg(args, env)),
                 "fn" => Some(eval_lambda_arg(args)),
+                "load" => Some(eval_load_risp_file(args, env)),
+                "env" => Some(eval_print_env(env)),
+                "print" => Some(eval_print(args, env)),
                 _ => None,
             }
         }
         _ => None
     }
+}
+
+fn eval_print(args: &[RispExp], env: &mut RispEnv) -> Result<RispExp, RispErr> {
+    let key = native_car(args)?;
+    let data = match key {
+        RispExp::Symbol(_) => {
+            env.get(&key.to_string()).ok_or(RispErr::Reason(format!("unexpected symbol='{}'",key)))?
+        },
+        _ => key,
+    };
+    Ok(data)
+}
+
+fn eval_print_env(env: &RispEnv) -> RispResult {
+    for (k ,v) in env.data.iter() {
+        println!("{}:{}", k, v);
+    }
+    Ok(RispExp::Nil)
 }
 
 pub fn native_car(list: &[RispExp]) -> RispResult {
@@ -32,17 +55,19 @@ pub fn native_cdr(list: &[RispExp]) -> RispResult {
     }
 }
 
-fn eval_lambda_arg(args: &[RispExp]) -> Result<RispExp, RispErr> {
-    let params = args.first().ok_or(RispErr::Reason("expected args args".to_string()))?;
-    let body = args.get(1).ok_or(RispErr::Reason("expected second args".to_string()))?;
+fn eval_load_risp_file(args: &[RispExp], env: &mut RispEnv) -> RispResult {
+    let path = args.first().ok_or(RispErr::Reason("expected first args".to_string()))?;
+    let script = fs::read_to_string(path.to_string()).ok().ok_or(RispErr::Reason("can't load file".to_string()))?;
+    Ok(parse_eval(script, env)?)
+}
 
-    if args.len() > 2 {
-        return Err(RispErr::Reason("lambda definition can only have two args".to_string()))
-    }
+fn eval_lambda_arg(args: &[RispExp]) -> RispResult {
+    let params = args.first().ok_or(RispErr::Reason("expected first args".to_string()))?;
+    let body = args[1..].to_vec();
 
     Ok(RispExp::Lambda(RispLambda{
-        body_exp: Rc::new(body.clone()),
         params_exp: Rc::new(params.clone()),
+        body_exp: Rc::new(body.clone()),
     }))
 }
 
@@ -79,7 +104,8 @@ fn eval_list(args: &[RispExp], env: &mut RispEnv) -> Result<Vec<RispExp>, RispEr
 }
 
 
-fn env_for_lambda<'a>(params_exp: Rc<RispExp>, args: &[RispExp], outer_env: &'a mut RispEnv) -> Result<RispEnv<'a>, RispErr> {
+fn env_for_lambda<'a>(params_exp: Rc<RispExp>, args: &[RispExp], outer_env: &'a mut RispEnv)
+                      -> Result<RispEnv<'a>, RispErr> {
     let symbols = parse_list_of_symbol_strings(params_exp)?;
     if symbols.len() != args.len() {
         return Err(RispErr::Reason(format!("expected {} arguments, got {}", symbols.len(), args.len())))
@@ -94,14 +120,15 @@ fn env_for_lambda<'a>(params_exp: Rc<RispExp>, args: &[RispExp], outer_env: &'a 
 
 pub fn eval(exp: &RispExp, env: &mut RispEnv) -> RispResult {
     match exp {
+        RispExp::Nil        => Ok(exp.clone()),
+        RispExp::Bool(_)    => Ok(exp.clone()),
+        RispExp::Number(_)  => Ok(exp.clone()),
+        RispExp::Literal(_) => Ok(exp.clone()),
         RispExp::Symbol(k) => {
             env.get(k)
                .ok_or(RispErr::Reason(format!("unexpected symbol='{}'",k)))
                .map(|x| x.clone())
         },
-        RispExp::Nil => Ok(exp.clone()),
-        RispExp::Bool(_)   => Ok(exp.clone()),
-        RispExp::Number(_) => Ok(exp.clone()),
         RispExp::List(list) => {
             let first = list
                 .first()
@@ -116,7 +143,8 @@ pub fn eval(exp: &RispExp, env: &mut RispEnv) -> RispResult {
                             f(&eval_list(args, env)?)
                         },
                         RispExp::Lambda(lambda) => {
-                            eval(&lambda.body_exp, &mut env_for_lambda(lambda.params_exp, args, env)?)
+                            let local_env = &mut env_for_lambda(lambda.params_exp, args, env)?;
+                            Ok(eval_list(lambda.body_exp.as_ref(), local_env)?.last().unwrap().clone())
                         }
                         _ => Err(RispErr::Reason(format!("Invalid function: {}", first)))
                     }

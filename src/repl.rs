@@ -3,9 +3,16 @@ use crate::parser::*;
 use crate::eval::*;
 
 pub fn parse_eval(exp: String, env: &mut RispEnv) -> RispResult {
-    let (parsed_exp, _) = parse(&tokenize(exp))?;
-    let evaled_exp = eval(&parsed_exp, env)?;
-    Ok(evaled_exp)
+    let mut token = tokenize(exp);
+    loop {
+        let (parsed_exp, remain) = parse(&token)?;
+        token = remain.to_vec();
+        if token.is_empty() {
+            return Ok(eval(&parsed_exp, env)?)
+        } else {
+            eval(&parsed_exp, env)?;
+        }
+    }
 }
 
 fn slurp_expr() -> String {

@@ -13,7 +13,7 @@ pub fn tokenize(expr: String) -> Vec<String> {
         .collect()
 }
 
-pub fn parse<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a[String]), RispErr> {
+pub fn parse(tokens: & [String]) -> Result<(RispExp, &[String]), RispErr> {
     let (token, rest) = tokens.split_first()
         .ok_or(RispErr::Reason("could not get token".to_string()))?;
 
@@ -24,7 +24,7 @@ pub fn parse<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a[String]), RispErr
     }
 } 
 
-fn read_seq<'a>(tokens: &'a [String]) -> Result<(RispExp, &'a[String]), RispErr> {
+fn read_seq(tokens: &[String]) -> Result<(RispExp, &[String]), RispErr> {
     let mut res: Vec<RispExp> = vec![];
     let mut xs = tokens;
     loop {
@@ -49,7 +49,13 @@ fn parse_atom(token: &str) -> RispExp {
             let potential_float: Result<f64, ParseFloatError> = token.parse();
             match potential_float {
                 Ok(v)  => RispExp::Number(v),
-                Err(_) => RispExp::Symbol(token.to_string().clone()),
+                Err(_) => {
+                    if token.starts_with("\"") && token.ends_with("\"") {
+                        RispExp::Literal(token[1..token.len()-1].to_string())
+                    } else {
+                        RispExp::Symbol(token.to_string().clone())
+                    }
+                },
             }
         }
     }
@@ -62,9 +68,9 @@ fn parse_single_list(exp: &RispExp) -> Result<Vec<RispExp>, RispErr> {
     }
 }
 
-fn parse_list(args: &[RispExp]) -> Result<Vec<RispExp>, RispErr> {
-    Ok(args.to_vec())
-}
+//fn parse_list(args: &[RispExp]) -> Result<Vec<RispExp>, RispErr> {
+//    Ok(args.to_vec())
+//}
 
 fn parse_list_of_floats(args: &[RispExp]) -> Result<Vec<f64>, RispErr> {
     args.iter()
