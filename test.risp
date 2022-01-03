@@ -1,0 +1,6 @@
+(let a_b (fn (a b) 
+     (let c (+ a b))
+     (+ c 1)))
+
+(let a 10)
+(let b 10)
