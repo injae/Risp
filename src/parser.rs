@@ -2,9 +2,11 @@ use std::{num::ParseFloatError, collections::HashMap};
 use crate::risp_type::*;
 use std::rc::Rc;
 use std::convert::TryFrom;
+use crate::eval::*;
 
 pub fn tokenize(expr: String) -> Vec<String> {
-    expr.replace("(", " ( ")
+    expr.replace("'(", " ( list ")
+        .replace("(", " ( ")
         .replace(")", " ) ")
         .split_whitespace()
         .map(|x| x.to_string())
@@ -138,12 +140,27 @@ pub fn standard_env<'a>() -> RispEnv<'a> {
     data.insert(">=".to_string(), RispExp::Func(inequality_sign!(|a,b| a >= b)));
     data.insert("<=".to_string(), RispExp::Func(inequality_sign!(|a,b| a <= b)));
     data.insert(
+        "list".to_string(),
+        RispExp::Func(|args: &[RispExp]| -> RispResult {
+            Ok(RispExp::List(args.to_vec()))
+        }
+    ));
+    data.insert(
         "car".to_string(),
         RispExp::Func(|args: &[RispExp]| -> RispResult {
-            if args.len() > 2 {
-                return Err(RispErr::Reason("Wrong number of arguments: car, 2".to_string()));
-            }
-            Ok(parse_single_list(&args[0])?[0].clone())
+            let [list_exp] = <&[RispExp; 1]>::try_from(args).ok().ok_or(
+                RispErr::Reason("Wrong number of arguments: car, 2".to_string())
+            )?;
+            Ok(native_car(parse_single_list(list_exp)?.as_ref())?)
+        }
+    ));
+    data.insert(
+        "cdr".to_string(),
+        RispExp::Func(|args: &[RispExp]| -> RispResult {
+            let [list_exp] = <&[RispExp; 1]>::try_from(args).ok().ok_or(
+                RispErr::Reason("Wrong number of arguments: cdr, 2".to_string())
+            )?;
+            Ok(native_cdr(parse_single_list(list_exp)?.as_ref())?)
         }
     ));
     data.insert(
@@ -155,7 +172,6 @@ pub fn standard_env<'a>() -> RispEnv<'a> {
             let list = parse_single_list(list_exp)?;
             let idx = parse_single_float(idx_exp)? as usize;
             Ok(list.into_iter().nth(idx).unwrap_or(RispExp::Nil))
-            //Ok(list_exp)
         }
     ));
 

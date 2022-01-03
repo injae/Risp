@@ -2,6 +2,7 @@ use crate::risp_type::*;
 use crate::parser::*;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::convert::TryFrom;
 
 fn eval_built_in_func(exp: &RispExp, args: &[RispExp], env: &mut RispEnv) -> Option<RispResult> {
     match exp {
@@ -9,7 +10,7 @@ fn eval_built_in_func(exp: &RispExp, args: &[RispExp], env: &mut RispEnv) -> Opt
             match s.as_ref() {
                 "if"  => Some(eval_if_arg(args, env)),
                 "let" => Some(eval_let_arg(args, env)),
-                "fn" => Some(eval_lamgda_arg(args)),
+                "fn" => Some(eval_lambda_arg(args)),
                 _ => None,
             }
         }
@@ -17,7 +18,21 @@ fn eval_built_in_func(exp: &RispExp, args: &[RispExp], env: &mut RispEnv) -> Opt
     }
 }
 
-fn eval_lamgda_arg(args: &[RispExp]) -> Result<RispExp, RispErr> {
+pub fn native_car(list: &[RispExp]) -> RispResult {
+    Ok(list.first()
+        .ok_or(RispErr::Reason("expected a non empty list".to_string()))?.clone())
+}
+
+pub fn native_cdr(list: &[RispExp]) -> RispResult {
+    let cdr = list[1..].to_vec();
+    if cdr.len() == 0 {
+        Ok(RispExp::Nil)
+    } else {
+        Ok(RispExp::List(cdr))
+    }
+}
+
+fn eval_lambda_arg(args: &[RispExp]) -> Result<RispExp, RispErr> {
     let params = args.first().ok_or(RispErr::Reason("expected args args".to_string()))?;
     let body = args.get(1).ok_or(RispErr::Reason("expected second args".to_string()))?;
 
@@ -47,18 +62,16 @@ fn eval_if_arg(args: &[RispExp], env: &mut RispEnv) -> RispResult {
 }
 
 fn eval_let_arg(args: &[RispExp], env: &mut RispEnv) -> RispResult {
-    let first_arg = args.first().ok_or(RispErr::Reason("expected first argument".to_string()))?;
-    let symbol = match first_arg {
+    let [symbol_exp, value_exp] = <&[RispExp; 2]>::try_from(args).ok().ok_or(
+        RispErr::Reason("Wrong number of arguments: let, 2".to_string())
+    )?;
+    let symbol = match symbol_exp {
         RispExp::Symbol(s) => Ok(s.clone()),
         _ => Err(RispErr::Reason("expected first arg to be a symbol".to_string()))
     }?;
-    let value = args.get(1).ok_or(RispErr::Reason("expected second arg".to_string()))?;
-    if args.len() > 2 {
-        return Err(RispErr::Reason("let can only have two args".to_string()));
-    }
-    let eval_value = eval(value, env)?;
-    env.data.insert(symbol, eval_value);
-    Ok(first_arg.clone())
+    let value = eval(value_exp, env)?;
+    env.data.insert(symbol, value);
+    Ok(symbol_exp.clone())
 }
 
 fn eval_list(args: &[RispExp], env: &mut RispEnv) -> Result<Vec<RispExp>, RispErr> {
@@ -105,7 +118,7 @@ pub fn eval(exp: &RispExp, env: &mut RispEnv) -> RispResult {
                         RispExp::Lambda(lambda) => {
                             eval(&lambda.body_exp, &mut env_for_lambda(lambda.params_exp, args, env)?)
                         }
-                        _ => Ok(exp.clone())
+                        _ => Err(RispErr::Reason(format!("Invalid function: {}", first)))
                     }
                 }
             }
