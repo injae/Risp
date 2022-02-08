@@ -1,6 +1,9 @@
+use anyhow::Result;
 use core::fmt;
-use std::rc::Rc;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::rc::Rc;
+use thiserror::Error;
 
 #[derive(Clone)]
 pub enum RispExp {
@@ -14,15 +17,38 @@ pub enum RispExp {
     Lambda(RispLambda),
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum RispErr {
+    #[error("`{0}`")]
     Reason(String),
+    #[error("Unexpected Symbol='{0}'")]
+    UnexpectedSymbol(String),
+    #[error("Unexpected Syntax")]
+    UnexpectedSyntax,
+    #[error("Invalid Function: '{0}'")]
+    InvalidFunction(String),
+    #[error("Invalid Arguments")]
+    InvalidArgs,
+    #[error("IO Error `{0}`")]
+    IOError(#[from] std::io::Error),
+    #[error("unknown data store error")]
+    Unknown,
 }
+
+//impl Display for RispErr {
+//    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//        let str = match &self {
+//            RispErr::Reason(s) => s,
+//            RispErr::IOError(e) => &e.to_string(),
+//        };
+//        write!(f, "{str}")
+//    }
+//}
 
 #[derive(Clone)]
 pub struct RispEnv<'a> {
     pub data: HashMap<String, RispExp>,
-    pub outer: Option<&'a RispEnv<'a>>
+    pub outer: Option<&'a RispEnv<'a>>,
 }
 
 impl<'a> RispEnv<'a> {
@@ -32,7 +58,7 @@ impl<'a> RispEnv<'a> {
             None => match &self.outer {
                 Some(outer_env) => outer_env.get(key),
                 None => None,
-            }
+            },
         }
     }
 }
@@ -55,12 +81,12 @@ impl fmt::Display for RispExp {
             RispExp::List(list) => {
                 let xs: Vec<String> = list.iter().map(|x| x.to_string()).collect();
                 format!("({})", xs.join(","))
-            },
+            }
             RispExp::Func(_) => "Function".to_string(),
             RispExp::Lambda(_) => "Lambda".to_string(),
             RispExp::Literal(s) => s.clone(),
         };
 
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
